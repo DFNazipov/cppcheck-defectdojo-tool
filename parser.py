@@ -32,6 +32,8 @@ class CppChechkParserXMl:
             file0 = error.get('file0','')
             cwe = error.get('cwe','')
             
+            description = f"\n**Description:** Id {id}, severity {severity}, verbose {verbose}, file0 {file0}"
+
 
             
             for locaction in error.findall("location"):
