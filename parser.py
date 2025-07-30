@@ -1,4 +1,4 @@
-__author__ = "phylu"
+__author__ = "DFNazipov"
 
 from xml.dom import NamespaceErr
 
