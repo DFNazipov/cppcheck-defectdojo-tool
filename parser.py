@@ -1,85 +1,102 @@
 __author__ = "DFNazipov"
 
-from xml.dom import NamespaceErr
+from defusedxml.ElementTree import parse
+from dojo.models import Finding
 
-from defusedxml import ElementTree
 
-from dojo.models import Finding, Endpoint
+class CppcheckParser:
 
-class CppChechkParserXMl:
-    
     def get_scan_types(self):
-        return ["Cppchech"]
-    
+        return ["Cppcheck"]
+
     def get_label_for_scan_types(self, scan_type):
-        return scan_type
+        return "Cppcheck"
 
     def get_description_for_scan_types(self, scan_type):
-        return "XML file from SAST Scanner Cppcheck." 
-    
-    
-    def get_findings(self, file, test):
-        cppcheck_tree = ElementTree.parse(file)
-        root = cppcheck_tree.getroot()
-        
-        if "xml-report" not in root.tag:
+        return "XML file from SAST Scanner Cppcheck."
+
+    def get_findings(self, filename, test):
+        tree = parse(filename)
+        root = tree.getroot()
+        findings = []
+        if "results" not in root.tag:
             msg = "This doesn't seem to be a valid Cppcheck XML file."
-            raise NamespaceErr(msg)
-        for error in root.findall("error"):
-            id = error.get('id','')
-            severity = error.get('severity','')
-            verbose = error.get('verbose','')
-            file0 = error.get('file0','')
-            cwe = error.get('cwe','')
-            
-            description = f"\n**Description:** Id {id}, severity {severity}, verbose {verbose}, file0 {file0}"
-
-
-            
-            for locaction in error.findall("location"):
-                line = locaction.get("line", "")
-                column = locaction.get("column", "")
-                info = locaction.get("info", "")
-
-                if line or column or info:
-                    description += f"\n**Location:** Line {line}, Column {column}: {info}"
-
-            # Проверяем на дубликаты
-            dupe_key = f"cppcheck:{id}:{file0}"
-            if dupe_key in dupes:
-                find = dupes[dupe_key]
-                find.description += "\n-----\n\n" + description
-                find.nb_occurrences += 1
-            else:
-                finding = Finding(
-                    title=id,
-                    test=test,
-                    description=description,
-                    severity=finding_severity,
-                    component_name=file0,
-                    component_version="",
-                    vuln_id_from_tool=id,
-                    nb_occurrences=1,
-                )
-                finding.date = report_date
-                dupes[dupe_key] = finding
-
-        return list(dupes.values())
+            raise ValueError(msg)
         
-    
+        errors_element = root.find("errors")
+        if errors_element is None:
+            return findings
+
+        for error in errors_element.findall('error'):
+            error_id = error.get('id')
+            msg = error.get('msg')
+            title = f"{error_id}: {msg}" if error_id else msg[:100]
+            verbose=error.get('verbose')
+            severity = self.convert_severity(error.get('severity', ''))
+            cwe = error.get('cwe')
+            file0=error.get('file0')
+
+            description = f"**Message:** {msg}\n"
+            if cwe:
+                description += f"**CWE:** {cwe}\n"
+
+            locations = []
+            for location in error.findall('location'):
+                file_loc = location.get('file', '')
+                line_loc = location.get('line', '')
+                info_loc = location.get('info', '')
+                column_loc = location.get('column', '')
+                loc_str = f"File: {file_loc}"
+                if line_loc:
+                    loc_str += f", Line: {line_loc}"
+                if column_loc:
+                    loc_str += f", Column: {column_loc}"
+                if info_loc:
+                    loc_str += f" ({info_loc})"
+                locations.append(loc_str)
+
+            if locations:
+                description += "**Locations:**\n" + "\n".join(locations)
+
+            # Получаем первую локацию для file_path и line
+            first_location = error.find('location')
+            file_path = None
+            line = None
+            if first_location is not None:
+                file_path = first_location.get('file') 
+                line_str = first_location.get('line')
+                if line_str and line_str.isdigit():
+                    line = int(line_str)
+            
+
+            finding = Finding(
+                title=title,
+                test=test,
+                description=description,
+                severity=severity,
+                static_finding=True,
+                dynamic_finding=False,
+                vuln_id_from_tool=error_id,
+                file_path=file_path,
+                line=line,
+            )
+
+            if cwe and cwe.isdigit():
+                finding.cwe = int(cwe)
+
+            findings.append(finding)
+
+        return findings
+
     def convert_severity(self, severity):
-    
         mapping = {
             "none": 'Info',
             "style": 'Info',
-            "perfomance": 'Info',
-            "portatbility": 'info',
+            "performance": 'Info',
+            "portability": 'Info',
             "debug": 'Info',
             'information': 'Info',
             'warning': 'Medium',
             'error': 'High'
         }
-        return mapping.get(severity, 'Medium')    
-    
- 
-    
+        return mapping.get(severity.lower(), 'Info')
