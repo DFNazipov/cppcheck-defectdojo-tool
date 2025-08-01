@@ -31,12 +31,12 @@ class CppcheckParser:
             error_id = error.get('id')
             msg = error.get('msg')
             title = f"{error_id}: {msg}" if error_id else msg[:100]
-            verbose=error.get('verbose')
             severity = self.convert_severity(error.get('severity', ''))
             cwe = error.get('cwe')
-            file0=error.get('file0')
+            
 
             description = f"**Message:** {msg}\n"
+            
             if cwe:
                 description += f"**CWE:** {cwe}\n"
 
@@ -46,11 +46,11 @@ class CppcheckParser:
                 line_loc = location.get('line', '')
                 info_loc = location.get('info', '')
                 column_loc = location.get('column', '')
-                loc_str = f"File: {file_loc}"
+                loc_str = f"**File:** {file_loc}"
                 if line_loc:
-                    loc_str += f", Line: {line_loc}"
+                    loc_str += f", **Line:** {line_loc}"
                 if column_loc:
-                    loc_str += f", Column: {column_loc}"
+                    loc_str += f", **Column:** {column_loc}"
                 if info_loc:
                     loc_str += f" ({info_loc})"
                 locations.append(loc_str)
@@ -58,7 +58,6 @@ class CppcheckParser:
             if locations:
                 description += "**Locations:**\n" + "\n".join(locations)
 
-            # Получаем первую локацию для file_path и line
             first_location = error.find('location')
             file_path = None
             line = None
@@ -91,12 +90,12 @@ class CppcheckParser:
     def convert_severity(self, severity):
         mapping = {
             "none": 'Info',
-            "style": 'Info',
+            "style": 'Low',
             "performance": 'Info',
-            "portability": 'Info',
+            "portability": 'Low',
             "debug": 'Info',
             'information': 'Info',
-            'warning': 'Medium',
-            'error': 'High'
+            'warning': 'High',
+            'error': 'Critical'
         }
         return mapping.get(severity.lower(), 'Info')
